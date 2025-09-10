@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 
 HTML_DIR = "htmls"
 EXCEL_FILE = "results.xlsx"
-OUTPUT_FILE = "results_with_all_details_2.xlsx"
+OUTPUT_FILE = "Full results_latest.xlsx"
 
 def safe_text(tag):
     """Helper to extract text or return '-' if missing."""
@@ -34,6 +34,7 @@ def parse_html(file_path):
     # --- Reviews ---
     reviews_tag = soup.find("span", class_="text-mid_grey font-normal whitespace-nowrap")
     reviews = safe_text(reviews_tag)
+    reviews = reviews.replace("(", "").replace(")", "").strip()  # remove parentheses
 
     # --- Bedrooms ---
     bedrooms_tag = soup.find("figcaption", string=lambda t: t and "Schlafzimmer" in t)
@@ -53,7 +54,6 @@ def parse_html(file_path):
         txt = tag.get_text(strip=True)
         if not txt or txt == "-":
             continue
-        # Skip if txt matches bedrooms, size, or max_people
         if any(txt == val for val in [bedrooms, size, max_people] if val != "-"):
             continue
         if "Haftung" in txt or "Unterkunft" in txt:
@@ -62,6 +62,13 @@ def parse_html(file_path):
             continue
         features.append(txt)
     features_text = "; ".join(features) if features else "-"
+
+    # --- Lat/Lon from <figure id="map"> ---
+    lat, lon = "-", "-"
+    fig_tag = soup.find("figure", id="map")
+    if fig_tag:
+        lat = fig_tag.get("data-lat", "-")
+        lon = fig_tag.get("data-lon", "-")
 
     # --- Description ---
     desc_container = soup.find("div", id="manualBlock")
@@ -75,9 +82,11 @@ def parse_html(file_path):
     size = clean_text_for_excel(size)
     max_people = clean_text_for_excel(max_people)
     features_text = clean_text_for_excel(features_text)
+    lat = clean_text_for_excel(lat)
+    lon = clean_text_for_excel(lon)
     description = clean_text_for_excel(description)
 
-    return title, stars, reviews, bedrooms, size, max_people, features_text, description
+    return title, stars, reviews, bedrooms, size, max_people, features_text, lat, lon, description
 
 def main():
     # Load existing Excel
@@ -85,7 +94,7 @@ def main():
 
     # Add new columns if not already there
     new_cols = ["Title", "Stars", "No. of reviews", "No. of bedrooms",
-                "Size [m2]", "Max people", "Features", "Description"]
+                "Size", "Max people", "Features", "Latitude", "Longitude", "Description"]
     for col in new_cols:
         if col not in df.columns:
             df[col] = "-"
@@ -101,10 +110,12 @@ def main():
             df.at[idx, "Stars"] = parsed[1]
             df.at[idx, "No. of reviews"] = parsed[2]
             df.at[idx, "No. of bedrooms"] = parsed[3]
-            df.at[idx, "Size [m2]"] = parsed[4]
+            df.at[idx, "Size"] = parsed[4]
             df.at[idx, "Max people"] = parsed[5]
             df.at[idx, "Features"] = parsed[6]
-            df.at[idx, "Description"] = parsed[7]
+            df.at[idx, "Latitude"] = parsed[7]
+            df.at[idx, "Longitude"] = parsed[8]
+            df.at[idx, "Description"] = parsed[9]
         else:
             print(f"⚠️ No HTML file found for {object_id}")
 
